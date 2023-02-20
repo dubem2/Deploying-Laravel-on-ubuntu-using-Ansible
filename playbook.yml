@@ -1,0 +1,347 @@
+---
+- name: Let's De[ploy A Laravel Application
+  hosts: managednode
+  remote_user: ubuntu
+  become: true
+
+  tasks:
+  - name: Update Apt Repository
+    apt: update_cache=yes cache_valid_time=3600
+  - name: Upgrade The Apt Repository
+    apt: upgrade=yes update_cache=yes cache_valid_time=3600
+
+  - name: Install 'wget', 'git', 'curl', and 'apache2'
+    apt:
+     pkg:
+     - wget
+     - git
+     - curl
+     - apache2
+  
+  - name: Install UFW
+    apt: name=ufw state=present
+  - name: Allow Apache
+    ufw: name=Apache rule=allow
+  - name: Allow Apache Full
+    ufw: name='Apache Full' rule=allow
+  - name: Allow OpenSSH
+    ufw: name=OpenSSH rule=allow
+  - name: Allow SSH( access to port 22)
+    ufw: rule=allow port='22' proto=tcp
+  - name: Allow HTTP(access to port 80)
+    ufw: rule=allow port='80' proto=tcp
+  - name: Allow HTTPS (access to port 443)
+    ufw: rule=allow port='443'
+  - name: Allow access to port 853 (DNS over TLS)
+    ufw: rule=allow port='853'
+  - name: Allow access to port 3306 (MySQL Server)
+    ufw: rule=allow port='3306'
+  - name: Allow access to port 5432 (PostgreSQL Server)
+    ufw: rule=allow port='5432'
+  - name: Enable UFW
+    ufw: state=enabled policy=allow
+  
+  - name: Copy PostgreSQL Installation Script to managednode
+    copy:
+      src: Postgreinstall.sh
+      dest: /home/ubuntu
+      mode: '0775'
+      owner: ubuntu
+      group: ubuntu
+  - name: Run PostgreSQL installataion Script 
+    command: sh /home/ubuntu/Postgreinstall.sh
+  
+  - name: Update Apt Repository
+    apt: update_cache=yes cache_valid_time=3600
+  - name: Upgrade The Apt Repository
+    apt: upgrade=yes update_cache=yes cache_valid_time=3600
+
+  - name: Install Python3
+    apt: name=python3 state=latest
+  - name: Install Pip
+    apt: name=pip state=latest
+
+  - name: Install MySQL server
+    apt:
+      name: mysql-server
+      state: latest
+
+  - name: Install MySQL client
+    apt:
+      name: mysql-client
+      state: latest
+
+  - name: Install PyMySQL Library
+    pip: name=pymysql state=latest
+
+  - name: Start MySQL service
+    service:
+      name: mysql
+      state: started
+      enabled: true
+
+  - name: Change authentication plugin of MySQL root user to mysql_native_password
+    command: mysql -u root -e 'UPDATE mysql.user SET plugin="mysql_native_password" WHERE user="root" AND host="localhost"'
+
+  - name: Flush privileges
+    command: mysql -u root -e 'FLUSH PRIVILEGES'
+  - name: Set password to MySQL root user
+    mysql_user:
+     login_host: 'localhost'
+     login_user: 'root'
+     login_password: ''
+     name: 'root'
+     password: 'root'
+     state: present
+
+  - name: Remove any unknown MySQL server user for localhost
+    mysql_user:
+      login_user: 'root'
+      login_password: 'root'
+      name: ''
+      host: localhost
+      state: absent
+
+  - name: Create new Database
+    mysql_db:
+     login_user: 'root'
+     login_password: 'root'
+     name: 'examdb'
+     state: present
+  - name: Create new Database User
+    mysql_user:
+     login_user: 'root'
+     login_password: 'root'
+     name: 'examuser'
+     password: 'password'
+     priv: 'examdb.*:ALL,GRANT'
+
+  - name: Remove the MySQL Test Database
+    mysql_db:
+      login_user: 'root'
+      login_password: 'root'
+      name: test
+      state: absent
+
+  - name: Install Software properties
+    command: apt install software-properties-common -y
+  - name: Add Apt Repo for PHP
+    command: add-apt-repository ppa:ondrej/php -y
+  
+  - name: Update Apt Repository
+    apt: update_cache=yes cache_valid_time=3600 
+  - name: Upgrade The Apt Repository
+    apt: upgrade=yes update_cache=yes cache_valid_time=3600
+  
+  - name: Install PHP
+    command: apt install php8.1 -y
+  - name: Install other PHP Modules
+    apt:
+     pkg:
+     - php8.1-cli 
+     - php8.1-common  
+     - php8.1-pgsql 
+     - php8.1-mysql 
+     - php8.1-gd 
+     - php8.1-mbstring 
+     - php8.1-curl 
+     - php8.1-xml 
+     - php8.1-bcmath 
+     - libapache2-mod-php
+     - php8.1-xmlrpc
+     - php8.1-imagick
+     - php8.1-dev
+     - php8.1-imap
+     - php8.1-opcache
+     - php8.1-soap
+     - php8.1-zip
+     - php8.1-intl
+
+  - name: Update Apt Repository
+    apt: update_cache=yes cache_valid_time=3600 
+  - name: Upgrade The Apt Repository
+    apt: upgrade=yes update_cache=yes cache_valid_time=3600
+
+  - name: Install other PHP Modules
+    apt:
+     pkg:
+     - php8.1-curl 
+     - php8.1-cli
+     - unzip    
+
+  - name: Get Composer Installer
+    command: curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
+  - name: Using curl, fetch the latest signature 
+    command: echo $HASH
+    environment:
+     HASH: '`curl -sS https://composer.github.io/installer.sig`'
+
+  - name: Let's Verify that the Installation Script is Safe to Run
+    command: php -r "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+  - name: Install Composer Globally
+    command: sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+  - name: Give Composer Execute Permission 
+    file:
+      path: /usr/local/bin/composer
+      mode: u+x
+
+  - name: Clone The Laravel Repo into /var/www/laravel directory
+    command: git clone https://github.com/f1amy/laravel-realworld-example-app.git /var/www/laravel
+  - name: Let's make ubuntu the directory owner to run composer
+    file:
+      path: /var/www/laravel
+      state: directory
+      recurse: yes
+      owner: ubuntu
+      group: ubuntu
+
+  - name: Copy The .env configured from controlnode to managednode and change mode
+    copy:
+      src: .env
+      dest: /var/www/laravel
+      mode: '0775'      
+
+  - name: Update Apt Repository
+    apt: update_cache=yes cache_valid_time=3600 
+  - name: Upgrade The Apt Repository
+    apt: upgrade=yes update_cache=yes cache_valid_time=3600      
+
+- name: Composer App dependencies installation
+  hosts: managednode
+  remote_user: ubuntu
+  
+  tasks:
+  - name: PHP module
+    command: sudo apt install php8.0-curl -y
+
+  - name: First update composer
+    composer:
+     command: update
+     working_dir: /var/www/laravel
+
+  - name: Download and install libs and dependencies outlined in the /var/www/laravel/composer.lock
+    composer:
+     command: install
+     working_dir: /var/www/laravel
+
+- name: Continue Application Deployment
+  hosts: managednode
+  remote_user: ubuntu
+  become: true
+
+  tasks:
+  - name: Change Ownership to www-data
+    file:
+      path: /var/www/laravel
+      state: directory
+      recurse: yes
+      owner: www-data
+      group: www-data
+  - name: Change the Storage Folder mode
+    file:
+      path: /var/www/laravel/storage
+      state: directory
+      recurse: yes
+      mode: '0775'
+  - name: Change the Cache Folder mode
+    file:
+      path: /var/www/laravel/bootstrap/cache
+      state: directory
+      recurse: yes
+      mode: '0775'
+
+
+  - name: Change Ownership To www-data
+    file:
+      path: /var/www/laravel/.env
+      state: file
+      owner: www-data
+      group: www-data
+
+  - name: To Uncomment the route so the default laravel page can load in browser
+    copy:
+      src: web.php
+      dest: /var/www/laravel/routes
+      mode: '0775'
+  - name: Change the owner and group of the web.php file to www-data
+    file:
+      path: /var/www/laravel/routes/web.php
+      state: file
+      owner: www-data
+      group: www-data
+      mode: '0775'
+
+  - name: Create the Application Configuration File That will display the page by copying already edited conf file from controlnode
+    copy:
+      src: laravel.conf
+      dest: /etc/apache2/sites-available
+      owner: root
+      group: root
+      mode: '0644'
+
+  - name: Copy HyperText Access File to Redirect Page to Display the public files
+    copy:
+      src: .htaccess
+      dest: /var/www/laravel
+  - name: Change the owner and group of the .htaccess file to www-data
+    file:
+      path: /var/www/laravel/.htaccess
+      state: file
+      owner: www-data
+      group: www-data
+      mode: '0775'
+
+  - name: Disable the default apache web page
+    command: a2dissite 000-default.conf
+
+  - name: Enable Laravel Application Configurations To Display as Web Page
+    command: a2ensite laravel.conf
+
+  - name: Enable Apache Rewrite Rules 
+    command: a2enmod rewrite
+
+  - name: Restart apache
+    service:
+       name: apache2
+       state: restarted
+
+  - name: generate artisan key
+    ansible.builtin.shell: php artisan key:generate
+    args:
+        chdir: /var/www/laravel
+
+  - name: Run the php artisan config:cache command
+    ansible.builtin.shell: php artisan config:cache
+    args:
+        chdir: /var/www/laravel
+
+  - name: Run the php artisan migrate:fresh command
+    ansible.builtin.shell: php artisan migrate:fresh
+    args:
+        chdir: /var/www/laravel
+        
+#  - name: Set the App Key in your .env file   
+#    command: php /var/www/demoApp/artisan key:generate
+#  - name: Give Application Speed Boost
+#    command: php /var/www/demoApp/artisan config:cache
+#  - name: Install Our MySQL Database
+#    command: php /var/www/demoApp/artisan migrate:fresh
+
+  - name: Restart apache
+    service:
+       name: apache2
+       state: restarted
+  
+
+  - name: Set up SSL
+    apt: 
+     pkg:
+     - python3-certbot-apache
+     - openssl
+  - name: Request for certificate
+    command: sudo certbot --apache -w /var/www/laravel -d dubem-altchool.me -d www.dubem-altchool.me --non-interactive --agree-tos -m owohgeorge@gmail.com
+
+  - name: Restart apache
+    service:
+       name: apache2
+       state: restarted    
